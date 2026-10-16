@@ -1,0 +1,58 @@
+# Builds an installable Android APK in GitHub's cloud — nothing needs installing on your computer.
+# Run it from the repository's "Actions" tab ("Build APK" -> "Run workflow"), or it runs on every push to main.
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write # lets the job publish the APK as a GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Run tests and type check
+        run: |
+          npx tsc --noEmit
+          npx jest src/lib/__tests__/maprender.test.ts
+
+      - name: Generate the native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon
+
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk vacuula.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vacuula-apk
+          path: vacuula.apk
+
+      - name: Publish a release (direct download link for your phone)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Vacuula APK #${{ github.run_number }}
+          files: vacuula.apk
