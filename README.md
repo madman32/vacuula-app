@@ -1,5 +1,7 @@
 # Vacuula Mobile (Android + iOS)
 
+DISCLAIMER!!! This is not affiliated with Vacuula, it was made as a solution for my own itch.
+
 A React Native / Expo app that controls robots through a [Vacuula](https://github.com/vacuula/vacuula)
 server on your network — the same functionality as the server's web interface, in a native app.
 
@@ -18,26 +20,12 @@ server on your network — the same functionality as the server's web interface,
 
 Not included yet: drawing/editing zones on the map, firmware updates, push notifications.
 
-## Get the APK (no NPM, Android Studio or Flutter needed)
+## Get the APK
 
-GitHub builds the APK for you in the cloud. You only need a free GitHub account, a browser and your phone.
-
-1. **Make a repository.** On github.com click **+ → New repository**, name it `vacuula-mobile`, choose
-   *Private*, and create it.
-2. **Upload the project.** Unzip `vacuula_mobile.zip` on your computer. In the new repository click
-   **Add file → Upload files** and drag in everything from *inside* the `mobile` folder (the files such as
-   `package.json` and `app.json` must end up at the top level of the repo). Click **Commit changes**.
-3. **Add the build script.** The hidden `.github` folder is often skipped by drag-and-drop, so check the repo:
-   if there is no `.github/workflows/build-apk.yml`, click **Add file → Create new file**, type
-   `.github/workflows/build-apk.yml` as the name (typing the slashes creates the folders), paste in the
-   contents of that file from the zip, and commit.
-4. **Run the build.** Open the **Actions** tab. If asked, click *“I understand my workflows, go ahead and
-   enable them”*. Choose **Build APK** on the left, then **Run workflow → Run workflow**. It takes about
-   10–15 minutes (green tick = done). It also runs by itself whenever you commit to the main branch.
-5. **Download it.** When the run is green, go to the repository's front page and open **Releases** (right
+**Download it.** When the run is green, go to the repository's front page and open **Releases** (right
    sidebar) → *Vacuula APK #1* → **vacuula.apk**. (The same file is also attached to the run under *Artifacts*
    as a zip.) You can do this directly in your phone's browser, signed in to GitHub.
-6. **Install on your phone.**
+**Install on your phone.**
    - Android will ask you to allow installs from your browser: tap **Settings → Allow from this source**.
    - Open the downloaded `vacuula.apk` and tap **Install**. If Play Protect says the app is unrecognised,
      tap **More details → Install anyway** (the app is signed with a development key, not Google Play's).
