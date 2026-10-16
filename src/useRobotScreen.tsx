@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { RefreshControl, ScrollView, Text } from 'react-native';
 import { Banner, useAction } from './components/ui';
 import { useRobot } from './context';
@@ -7,8 +7,16 @@ import { RobotData } from './lib/models';
 import { VacuulaStore } from './lib/store';
 import { useTheme } from './theme';
 
+/**
+ * The robot being viewed. Provided by the tab layout: the dynamic `[serial]` route param is only
+ * present on the first tab, because tab-bar presses navigate to e.g. `map` without re-sending it.
+ */
+export const RobotSerialContext = createContext<string | undefined>(undefined);
+
 export function useRobotScreen() {
-  const { serial } = useLocalSearchParams<{ serial: string }>();
+  const params = useLocalSearchParams<{ serial?: string | string[] }>();
+  const fromParams = Array.isArray(params.serial) ? params.serial[0] : params.serial;
+  const serial = useContext(RobotSerialContext) ?? fromParams ?? '';
   const { store, robot, snap } = useRobot(serial);
   const action = useAction();
   return { serial, store, robot, snap, ...action };
