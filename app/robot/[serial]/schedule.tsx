@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Btn, Card, Chips, Field, Muted, Pill, SwitchRow } from '../../../src/components/ui';
 import {
   DAYS, Day, ScheduleEvent, cleaningModes, cleaningZones, formatNavMode, isGen3, isGen4, navigationModes, zoneLabel,
@@ -65,26 +65,33 @@ export default function Schedule() {
                 <Muted>Next: {next.toLocaleString([], { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</Muted>
               ) : null}
               {r.schedule.length ? (
-                r.schedule.map((e) => (
-                  <View key={e.id} style={{ paddingVertical: 10 }}>
-                    <Text style={{ color: t.text, fontSize: 16 }}>{describe(e, zoneName)}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                      {isGen4(r) ? (
-                        <SwitchRow
-                          label={e.enabled ? 'Enabled' : 'Disabled'} value={e.enabled} disabled={!r.connected}
-                          onValueChange={(v) => run(`en${e.id}`, () => st.setScheduleEventEnabled(serial, e.id, v))}
-                        />
-                      ) : <View />}
-                      <Btn
-                        kind="danger" label="Delete" disabled={!r.connected} busy={busy === `rm${e.id}`}
-                        onPress={() =>
-                          Alert.alert('Delete event', describe(e, zoneName), [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => void run(`rm${e.id}`, () => st.removeScheduleEvent(serial, e.id)) },
-                          ])
-                        }
+                r.schedule.map((e, i) => (
+                  <View
+                    key={e.id}
+                    style={{
+                      paddingVertical: 12,
+                      borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
+                      borderTopColor: t.border,
+                    }}
+                  >
+                    {/* Everything stacks vertically so nothing can run off a narrow screen. */}
+                    <Text style={{ color: t.text, fontSize: 16, lineHeight: 22 }}>{describe(e, zoneName)}</Text>
+                    {isGen4(r) ? (
+                      <SwitchRow
+                        label={e.enabled ? 'Enabled' : 'Disabled'} value={e.enabled} disabled={!r.connected}
+                        onValueChange={(v) => run(`en${e.id}`, () => st.setScheduleEventEnabled(serial, e.id, v))}
                       />
-                    </View>
+                    ) : null}
+                    <Btn
+                      kind="danger" label="Delete" disabled={!r.connected} busy={busy === `rm${e.id}`}
+                      style={{ marginTop: 8, alignSelf: 'stretch' }}
+                      onPress={() =>
+                        Alert.alert('Delete event', describe(e, zoneName), [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => void run(`rm${e.id}`, () => st.removeScheduleEvent(serial, e.id)) },
+                        ])
+                      }
+                    />
                   </View>
                 ))
               ) : (
