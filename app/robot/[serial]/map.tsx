@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { MapView } from '../../../src/components/MapView';
 import { Btn, Card, Muted, Pill, PromptModal, SwitchRow } from '../../../src/components/ui';
 import { MapInfo, enabledMaps, isGen3, isGen4, promotedMap } from '../../../src/lib/models';
@@ -91,6 +91,36 @@ export default function Maps() {
                   )
                 ))}
                 <Muted>Drawing new zones isn’t available in the app yet — use the Vacuula web interface.</Muted>
+              </Card>
+            ) : null}
+
+            {isGen4(r) ? (
+              <Card title="From cleaning history">
+                <Muted>
+                  {r.runs.length
+                    ? 'Add the floor map from your most recent cleaning to this list so you can clean by zone and see it here.'
+                    : 'Once the robot has completed a cleaning, its map can be added here.'}
+                </Muted>
+                {r.runs.length ? (
+                  <View style={{ gap: 8, marginTop: 10 }}>
+                    <Btn
+                      label="Add latest cleaning’s map" busy={busy === 'latest'}
+                      onPress={() => run('latest', async () => {
+                        const res = await st.useLatestRunMap(serial, false);
+                        setSelected(res.map.id);
+                        Alert.alert(res.already ? 'Already added' : 'Map added', `“${res.map.name}” is in your maps list.`);
+                      })}
+                    />
+                    <Btn
+                      kind="primary" label="Add latest & make active" disabled={!r.connected} busy={busy === 'latestActive'}
+                      onPress={() => run('latestActive', async () => {
+                        const res = await st.useLatestRunMap(serial, true);
+                        setSelected(res.map.id);
+                        Alert.alert('Active floorplan', `“${res.map.name}” is now the active floorplan.`);
+                      })}
+                    />
+                  </View>
+                ) : null}
               </Card>
             ) : null}
 

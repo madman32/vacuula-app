@@ -7,7 +7,7 @@ import {
   VacuulaClient, VacuulaError, SSEMessage,
 } from './client';
 import {
-  Category, DAYS, Day, GEN3_DAY_IDS, GEN3_MODE_IDS, GEN3_NAV_IDS, GEN4_NAV_MODES, MapInfo, RobotData, StartRequest, ZoneInfo,
+  Category, DAYS, RunSummary, Day, GEN3_DAY_IDS, GEN3_MODE_IDS, GEN3_NAV_IDS, GEN4_NAV_MODES, MapInfo, RobotData, StartRequest, ZoneInfo,
   applyGen3State, applyGen4State, buildStartCommand, cleaningModes, cleaningZones, gen3Cmd, gen4Cmd, gen4ScheduleRuns,
   isGen3, isGen4, newRobot, parseGen3Schedule, parseGen4Schedule, parseMaps, parseRobotEvent, parseRuns, parseZones,
   promotedMap, shiftSlot, StartError, ZONE_KEY_SEP, enabledMaps, nextScheduledRun,
@@ -539,6 +539,59 @@ export class VacuulaStore {
     await this.fetchSlow(r);
     this.emit();
   }
+  /**
+   * Add the floor map a cleaning ran on to the robot's maps list (Gen4 floorplans), optionally
+   * making it the active floorplan. Returns the map and whether it was already listed.
+   */
+  async addRunMapToMaps(serial: string, run: RunSummary, makeActive = false): Promise<{ map: MapInfo; already: boolean }> {
+    const r = this.get(serial);
+    if (!run.mapId) throw new ActionError('This cleaning has no saved map.');
+    let existing = r.maps.find((m) => m.id === run.mapId);
+    const already = !!existing;
+    if (!existing && isGen3(r)) {
+      throw new ActionError('Gen3 robots only keep maps made with “Explore & create map”; this cleaning did not use one.');
+    }
+    if (!existing) {
+      try {
+        await this.floorMap(serial, run.mapId);
+      } catch {
+        throw new ActionError('The server has no saved floor map for this cleaning.');
+      }
+      await this.client.useFloorplan(serial, run.mapId, true);
+      await this.fetchSlow(r);
+      existing = r.maps.find((m) => m.id === run.mapId);
+      if (!existing) throw new ActionError('The server did not add the map. Try again.');
+      if (!existing.raw?.name) {
+        // unnamed floorplans would show their UUID; give them a readable name
+        const when = (run.started ?? new Date()).toISOString().slice(0, 16).replace('T', ' ');
+        await this.client.updateMap(serial, existing.id, `Map ${when}`, existing.enabled);
+        await this.fetchSlow(r);
+        existing = r.maps.find((m) => m.id === run.mapId) ?? existing;
+      }
+      this.emit();
+    }
+    if (makeActive && isGen4(r) && !existing.promoted) {
+      await this.setFloorplanPromoted(serial, existing, true);
+      existing = r.maps.find((m) => m.id === run.mapId) ?? existing;
+    }
+    return { map: existing, already };
+  }
+
+  /** The newest cleaning that has a usable map, added to the maps list. */
+  async useLatestRunMap(serial: string, makeActive = false): Promise<{ map: MapInfo; already: boolean; run: RunSummary }> {
+    const r = this.get(serial);
+    let lastError: Error | undefined;
+    for (const run of r.runs.slice(0, 5)) {
+      try {
+        return { ...(await this.addRunMapToMaps(serial, run, makeActive)), run };
+      } catch (e) {
+        lastError = e as Error;
+        if (!(e instanceof ActionError) || !/no saved (floor )?map|has no saved/.test(e.message)) throw e;
+      }
+    }
+    throw lastError ?? new ActionError('No cleaning history yet.');
+  }
+
   async setBoundaryEnabled(serial: string, boundaryId: string, enabled: boolean) {
     const r = this.get(serial);
     const promoted = promotedMap(r);

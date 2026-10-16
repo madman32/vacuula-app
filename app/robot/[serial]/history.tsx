@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { MapView } from '../../../src/components/MapView';
-import { Card, Muted } from '../../../src/components/ui';
-import { RunSummary, runDurationMinutes } from '../../../src/lib/models';
+import { Alert } from 'react-native';
+import { Btn, Card, Muted, useAction } from '../../../src/components/ui';
+import { RobotData, RunSummary, isGen4, runDurationMinutes } from '../../../src/lib/models';
 import { VacuulaStore } from '../../../src/lib/store';
 import { RobotScroll, useRobotScreen } from '../../../src/useRobotScreen';
 import { useTheme } from '../../../src/theme';
 
-function RunMap({ store, serial, run }: { store: VacuulaStore; serial: string; run: RunSummary }) {
+function RunMap({ store, serial, run, robot }: { store: VacuulaStore; serial: string; run: RunSummary; robot: RobotData }) {
+  const { busy, run: act } = useAction();
   const [data, setData] = useState<{ floor?: any; path?: any }>();
   const [error, setError] = useState<string>();
   useEffect(() => {
@@ -28,7 +30,32 @@ function RunMap({ store, serial, run }: { store: VacuulaStore; serial: string; r
   }, [store, serial, run]);
   if (error) return <Muted>No map available for this cleaning.</Muted>;
   if (!data) return <Muted>Loading map…</Muted>;
-  return <View style={{ marginTop: 10 }}><MapView floor={data.floor} run={data.path} /></View>;
+  const listed = robot.maps.find((m) => m.id === run.mapId);
+  const add = (makeActive: boolean) =>
+    act(makeActive ? 'active' : 'add', async () => {
+      const res = await store.addRunMapToMaps(serial, run, makeActive);
+      Alert.alert('Map added', `“${res.map.name}” is now in the Maps tab${res.map.promoted ? ' and is the active floorplan' : ''}.`);
+    });
+  return (
+    <View style={{ marginTop: 10 }}>
+      <MapView floor={data.floor} run={data.path} />
+      {data.floor && run.mapId ? (
+        listed ? (
+          <>
+            <Muted>This cleaning’s map is in your Maps tab{listed.promoted ? ' (active floorplan)' : ''}.</Muted>
+            {isGen4(robot) && !listed.promoted ? (
+              <Btn label="Make active floorplan" disabled={!robot.connected} busy={busy === 'active'} onPress={() => add(true)} style={{ marginTop: 8 }} />
+            ) : null}
+          </>
+        ) : isGen4(robot) ? (
+          <View style={{ gap: 8, marginTop: 8 }}>
+            <Btn label="Use as floor map" busy={busy === 'add'} onPress={() => add(false)} />
+            <Btn kind="primary" label="Use & make active" disabled={!robot.connected} busy={busy === 'active'} onPress={() => add(true)} />
+          </View>
+        ) : null
+      ) : null}
+    </View>
+  );
 }
 
 export default function History() {
@@ -58,7 +85,7 @@ export default function History() {
                         run.complete === false ? 'incomplete' : undefined,
                       ].filter(Boolean).join(' · ')}
                     </Muted>
-                    {isOpen ? <RunMap store={st} serial={serial} run={run} /> : null}
+                    {isOpen ? <RunMap store={st} serial={serial} run={run} robot={r} /> : null}
                   </Card>
                 </Pressable>
               );
