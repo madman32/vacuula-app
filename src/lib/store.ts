@@ -12,6 +12,7 @@ import {
   isGen3, isGen4, newRobot, parseGen3Schedule, parseGen4Schedule, parseMaps, parseRobotEvent, parseRuns, parseZones,
   promotedMap, shiftSlot, StartError, ZONE_KEY_SEP, enabledMaps, nextScheduledRun,
 } from './models';
+import { Boundary, serializeBoundaries, upsertBoundary } from './zones';
 
 export class ActionError extends Error {}
 
@@ -590,6 +591,51 @@ export class VacuulaStore {
       }
     }
     throw lastError ?? new ActionError('No cleaning history yet.');
+  }
+
+  // ---- drawing zones
+
+  /** Current boundaries of a map straight from the server (Gen4) or the robot (Gen3). */
+  async loadBoundaries(serial: string, map: MapInfo): Promise<Boundary[]> {
+    const r = this.get(serial);
+    if (isGen4(r)) return (await this.client.getBoundaries(serial, map.id)) as Boundary[];
+    const resp = await this.cmd(serial, gen3Cmd('getMapBoundaries', { mapId: map.id }));
+    return (resp?.data?.boundaries ?? []) as Boundary[];
+  }
+
+  private async writeBoundaries(r: RobotData, map: MapInfo, list: Boundary[]) {
+    const payload = serializeBoundaries(r.gen, list);
+    if (isGen4(r)) {
+      await this.client.setBoundaries(r.serial, map.id, payload);
+      if (map.promoted) {
+        // the robot only learns about changed zones when the floorplan is promoted again
+        try {
+          await this.client.promoteFloorplan(r.serial, map.id);
+        } catch {
+          await this.fetchSlow(r);
+          this.emit();
+          throw new ActionError('Saved on the server, but could not update the robot. Is it online? Make the map active again to push it.');
+        }
+      }
+    } else {
+      await this.cmd(r.serial, gen3Cmd('setMapBoundaries', { mapId: map.id, boundaries: payload }));
+    }
+    await this.fetchSlow(r);
+    this.emit();
+  }
+
+  /** Create or update one zone / no-go. Re-reads the map first so other changes are never overwritten. */
+  async saveBoundary(serial: string, map: MapInfo, boundary: Boundary): Promise<void> {
+    const r = this.get(serial);
+    const current = await this.loadBoundaries(serial, map);
+    await this.writeBoundaries(r, map, upsertBoundary(current, boundary));
+  }
+
+  async deleteBoundary(serial: string, map: MapInfo, boundaryId: string): Promise<void> {
+    const r = this.get(serial);
+    const current = await this.loadBoundaries(serial, map);
+    if (!current.some((b) => b.id === boundaryId)) throw new ActionError('That zone no longer exists.');
+    await this.writeBoundaries(r, map, current.filter((b) => b.id !== boundaryId));
   }
 
   async setBoundaryEnabled(serial: string, boundaryId: string, enabled: boolean) {

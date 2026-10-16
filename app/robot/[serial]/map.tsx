@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
+import { ZoneEditor } from '../../../src/components/ZoneEditor';
 import { MapView } from '../../../src/components/MapView';
 import { Btn, Card, Muted, Pill, PromptModal, SwitchRow } from '../../../src/components/ui';
-import { MapInfo, enabledMaps, isGen3, isGen4, promotedMap } from '../../../src/lib/models';
+import { MapInfo, RobotData, ZoneInfo, enabledMaps, isGen3, isGen4, promotedMap } from '../../../src/lib/models';
 import { RobotScroll, useRobotScreen } from '../../../src/useRobotScreen';
 import { useTheme } from '../../../src/theme';
+
+// Gen3 zones live on the robot, so it must be reachable; Gen4 zones are stored on the server.
+const canEdit = (r: RobotData) => r.connected || isGen4(r);
 
 export default function Maps() {
   const t = useTheme();
@@ -13,6 +17,7 @@ export default function Maps() {
   const [floor, setFloor] = useState<any>();
   const [loadError, setLoadError] = useState<string>();
   const [renaming, setRenaming] = useState<MapInfo>();
+  const [editing, setEditing] = useState<{ zone?: ZoneInfo }>();
 
   const maps = robot ? (isGen4(robot) ? robot.maps : robot.maps) : [];
   const active = robot
@@ -74,23 +79,35 @@ export default function Maps() {
               </Card>
             ) : null}
 
-            {zones.length ? (
+            {active ? (
               <Card title="Zones & no-go areas">
                 {zones.map((z) => (
-                  isGen4(r) ? (
-                    <SwitchRow
-                      key={z.key} label={z.name} hint={z.kind === 'zone' ? 'Cleaning zone' : 'No-go'}
-                      value={z.enabled} disabled={!r.connected}
-                      onValueChange={(v) => run(`z${z.id}`, () => st.setBoundaryEnabled(serial, z.id, v))}
+                  <View key={z.key} style={{ paddingVertical: 8 }}>
+                    {isGen4(r) ? (
+                      <SwitchRow
+                        label={z.name} hint={z.shape === 'polyline' ? 'No-go line' : z.kind === 'zone' ? 'Cleaning zone' : 'No-go zone'}
+                        value={z.enabled} disabled={!r.connected}
+                        onValueChange={(v) => run(`z${z.id}`, () => st.setBoundaryEnabled(serial, z.id, v))}
+                      />
+                    ) : (
+                      <>
+                        <Text style={{ color: t.text, fontSize: 16 }}>{z.name}</Text>
+                        <Muted>{z.kind === 'zone' ? 'Cleaning zone' : 'No-go line'}</Muted>
+                      </>
+                    )}
+                    <Btn
+                      label="Edit shape" onPress={() => setEditing({ zone: z })} disabled={!floor || !canEdit(r)}
+                      style={{ marginTop: 4, alignSelf: 'flex-start' }}
                     />
-                  ) : (
-                    <View key={z.key} style={{ paddingVertical: 6 }}>
-                      <Text style={{ color: t.text, fontSize: 16 }}>{z.name}</Text>
-                      <Muted>{z.kind === 'zone' ? 'Cleaning zone' : 'No-go line'}</Muted>
-                    </View>
-                  )
+                  </View>
                 ))}
-                <Muted>Drawing new zones isn’t available in the app yet — use the Vacuula web interface.</Muted>
+                {!zones.length ? <Muted>No zones or no-go areas on this map yet.</Muted> : null}
+                <Btn
+                  kind="primary" label="Draw new zone or no-go" onPress={() => setEditing({})}
+                  disabled={!floor || !canEdit(r)} style={{ marginTop: 10 }}
+                />
+                {!floor ? <Muted>Waiting for the map to load…</Muted> : null}
+                {floor && !canEdit(r) ? <Muted>The robot must be online to change zones.</Muted> : null}
               </Card>
             ) : null}
 
@@ -133,6 +150,21 @@ export default function Maps() {
                 />
                 {!r.isDocked ? <Muted>The robot must be docked to start.</Muted> : null}
               </Card>
+            ) : null}
+
+            {active && floor ? (
+              <ZoneEditor
+                visible={!!editing} gen={r.gen} floor={floor} existing={editing?.zone} zones={zones}
+                onCancel={() => setEditing(undefined)}
+                onSave={async (b) => {
+                  await st.saveBoundary(serial, active, b);
+                  setEditing(undefined);
+                }}
+                onDelete={editing?.zone ? async () => {
+                  await st.deleteBoundary(serial, active, editing.zone!.id);
+                  setEditing(undefined);
+                } : undefined}
+              />
             ) : null}
 
             <PromptModal
